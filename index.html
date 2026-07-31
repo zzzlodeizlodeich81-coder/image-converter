@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Конвертер изображений</title>
+  <!-- Подключаем VK Bridge SDK -->
+  <script src="https://unpkg.com/@vkontakte/vk-bridge/dist/index.umd.js"></script>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: #f5f5f5;
+      margin: 0;
+      padding: 20px;
+      display: flex;
+      justify-content: center;
+    }
+    .card {
+      background: white;
+      padding: 24px;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+      max-width: 400px;
+      width: 100%;
+    }
+    h2 { margin-top: 0; color: #2c2d2e; font-size: 20px; text-align: center; }
+    .group { margin-bottom: 15px; }
+    label { display: block; margin-bottom: 6px; font-weight: 600; font-size: 14px; color: #555; }
+    input[type="file"], input[type="number"] {
+      width: 100%;
+      padding: 10px;
+      box-sizing: border-box;
+      border: 1px solid #dce1e6;
+      border-radius: 8px;
+      font-size: 14px;
+    }
+    .row { display: flex; gap: 10px; }
+    .row .group { flex: 1; }
+    button {
+      width: 100%;
+      background: #2787f5;
+      color: white;
+      border: none;
+      padding: 12px;
+      border-radius: 8px;
+      font-weight: bold;
+      font-size: 15px;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+    button:hover { background: #2276d7; }
+  </style>
+</head>
+<body>
+
+<div class="card">
+  <h2>Изменение размера & DPI</h2>
+  
+  <div class="group">
+    <label>Выберите изображение</label>
+    <input type="file" id="upload" accept="image/png, image/jpeg">
+  </div>
+
+  <div class="row">
+    <div class="group">
+      <label>Ширина (px)</label>
+      <input type="number" id="width" placeholder="1920">
+    </div>
+    <div class="group">
+      <label>Высота (px)</label>
+      <input type="number" id="height" placeholder="1080">
+    </div>
+  </div>
+
+  <div class="group">
+    <label>DPI</label>
+    <input type="number" id="dpi" value="300">
+  </div>
+
+  <button id="processBtn">Скачать обработанное фото</button>
+</div>
+
+<script>
+  // Инициализация VK Bridge
+  vkBridge.send('VKWebAppInit');
+
+  const upload = document.getElementById('upload');
+  const widthInput = document.getElementById('width');
+  const heightInput = document.getElementById('height');
+  const dpiInput = document.getElementById('dpi');
+  const processBtn = document.getElementById('processBtn');
+
+  let currentImg = null;
+
+  // Автоподстановка текущих размеров при выборе файла
+  upload.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const img = new Image();
+    img.onload = () => {
+      currentImg = img;
+      widthInput.value = img.width;
+      heightInput.value = img.height;
+    };
+    img.src = URL.createObjectURL(file);
+  });
+
+  // Функция для перезаписи DPI в заголовках JPEG файла
+  function changeJpegDpi(base64Data, dpi) {
+    const raw = atob(base64Data.split(',')[1]);
+    const array = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i++) array[i] = raw.charCodeAt(i);
+    
+    // Ищем маркер APP0 (JFIF)
+    if (array[0] === 0xFF && array[1] === 0xD8) {
+      let offset = 2;
+      while (offset < array.length) {
+        if (array[offset] === 0xFF && array[offset+1] === 0xE0) {
+          array[offset + 11] = 1; // Указываем измерения в инчах (DPI)
+          array[offset + 12] = (dpi >> 8) & 0xFF;
+          array[offset + 13] = dpi & 0xFF;
+          array[offset + 14] = (dpi >> 8) & 0xFF;
+          array[offset + 15] = dpi & 0xFF;
+          break;
+        }
+        offset += 1 + array[offset+2];
+      }
+    }
+    
+    let binary = '';
+    for (let i = 0; i < array.length; i++) binary += String.fromCharCode(array[i]);
+    return 'data:image/jpeg;base64,' + btoa(binary);
+  }
+
+  processBtn.addEventListener('click', () => {
+    if (!currentImg) {
+      alert('Сначала выберите файл!');
+      return;
+    }
+
+    const w = parseInt(widthInput.value);
+    const h = parseInt(heightInput.value);
+    const dpi = parseInt(dpiInput.value) || 72;
+
+    // Создаем холст для изменения пиксельного размера
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(currentImg, 0, 0, w, h);
+
+    // Получаем base64 JPEG
+    let dataUrl = canvas.toDataURL('image/jpeg', 0.95);
+    // Прописываем заголовок DPI
+    dataUrl = changeJpegDpi(dataUrl, dpi);
+
+    // Инициируем скачивание
+    const link = document.createElement('a');
+    link.download = `resized_${w}x${h}_${dpi}dpi.jpg`;
+    link.href = dataUrl;
+    link.click();
+  });
+</script>
+
+</body>
+</html>
