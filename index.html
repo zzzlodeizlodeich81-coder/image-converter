@@ -14,6 +14,7 @@
       padding: 20px;
       display: flex;
       justify-content: center;
+      position: relative;
     }
     .card {
       background: white;
@@ -49,6 +50,7 @@
       font-size: 15px;
       cursor: pointer;
       margin-top: 10px;
+      transition: background 0.2s;
     }
     .btn:hover { background: #2276d7; }
     .btn:disabled { background: #cccccc; cursor: not-allowed; }
@@ -75,6 +77,29 @@
       font-size: 13px;
       color: #666;
       margin-top: 5px;
+    }
+
+    /* Стильное встроенное уведомление вместо alert() */
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      background: #2c2d2e;
+      color: #fff;
+      padding: 12px 20px;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 500;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+      opacity: 0;
+      transition: transform 0.3s ease, opacity 0.3s ease;
+      z-index: 1000;
+      pointer-events: none;
+    }
+    .toast.show {
+      transform: translateX(-50%) translateY(0);
+      opacity: 1;
     }
   </style>
 </head>
@@ -119,17 +144,39 @@
   <!-- Блок предпросмотра и скачивания -->
   <div id="previewContainer">
     <label>Результат:</label>
+    <br>
     <img id="previewImg" src="" alt="Превью">
     <div id="fileInfo" class="file-info"></div>
     <button id="downloadBtn" class="btn btn-download">Скачать файл</button>
   </div>
 </div>
 
+<!-- Кастомное уведомление -->
+<div id="toast" class="toast"></div>
+
 <script>
+  let isVkApp = false;
+
+  // Функция вывода кастомного уведомления в интерфейсе сервиса
+  function showToast(message) {
+    const toast = document.getElementById('toast');
+    toast.innerText = message;
+    toast.classList.add('show');
+    setTimeout(() => {
+      toast.classList.remove('show');
+    }, 3000);
+  }
+
+  // Заглушка, чтобы случайный alert() от сторонних библиотек не вылез
+  window.alert = function(msg) {
+    showToast(msg);
+  };
+
   // Инициализация VK Bridge
   try {
     if (window.vkBridge) {
       vkBridge.send('VKWebAppInit');
+      isVkApp = true;
     }
   } catch(e) { console.log('Не в среде VK'); }
 
@@ -161,7 +208,7 @@
         currentImg = img;
         widthInput.value = img.width;
         heightInput.value = img.height;
-        previewContainer.style.display = 'none'; // прячем старое превью
+        previewContainer.style.display = 'none';
       };
       img.src = event.target.result;
     };
@@ -194,10 +241,23 @@
     return 'data:image/jpeg;base64,' + btoa(binary);
   }
 
+  // Преобразование dataURI в Blob
+  function dataURLtoBlob(dataurl) {
+    const arr = dataurl.split(',');
+    const mime = arr[0].match(/:(.*?);/)[1];
+    const bstr = atob(arr[1]);
+    let n = bstr.length;
+    const u8arr = new Uint8Array(n);
+    while (n--) {
+      u8arr[n] = bstr.charCodeAt(n);
+    }
+    return new Blob([u8arr], { type: mime });
+  }
+
   // Нажатие кнопки СКОНВЕРТИРОВАТЬ
   convertBtn.addEventListener('click', () => {
     if (!currentImg) {
-      alert('Сначала выберите файл!');
+      showToast('Сначала выберите файл!');
       return;
     }
 
@@ -211,7 +271,6 @@
     canvas.height = h;
     const ctx = canvas.getContext('2d');
     
-    // Если заливаем прозрачный PNG в JPG — делаем белый фон
     if (format === 'image/jpeg') {
       ctx.fillStyle = '#FFFFFF';
       ctx.fillRect(0, 0, w, h);
@@ -219,27 +278,22 @@
 
     ctx.drawImage(currentImg, 0, 0, w, h);
 
-    // Получаем Base64
     let dataUrl = canvas.toDataURL(format, 0.92);
 
-    // Если выпилили JPG — прописываем DPI
     if (format === 'image/jpeg') {
       dataUrl = changeJpegDpi(dataUrl, dpi);
     }
 
     resultDataUrl = dataUrl;
     
-    // Расширение файла
     let ext = 'jpg';
     if (format === 'image/png') ext = 'png';
     if (format === 'image/webp') ext = 'webp';
     
     resultFileName = `converted_${w}x${h}.${ext}`;
 
-    // Показываем результат
     previewImg.src = dataUrl;
     
-    // Считаем примерный размер файла
     const stringLength = dataUrl.length - 'data:image/png;base64,'.length;
     const sizeInBytes = 4 * Math.ceil(stringLength / 3) * 0.562489;
     const sizeInKb = (sizeInBytes / 1024).toFixed(1);
@@ -248,16 +302,38 @@
     previewContainer.style.display = 'block';
   });
 
-  // Нажатие кнопки СКАЧАТЬ
-  downloadBtn.addEventListener('click', () => {
+  // УНИВЕРСАЛЬНОЕ СКАЧИВАНИЕ (ВК Мобильный + ПК + Браузеры)
+  downloadBtn.addEventListener('click', async () => {
     if (!resultDataUrl) return;
+
+    // 1. Через VK Bridge (для моб. приложения)
+    if (isVkApp && vkBridge.supports && vkBridge.supports('VKWebAppDownloadFile')) {
+      try {
+        await vkBridge.send('VKWebAppDownloadFile', {
+          url: resultDataUrl,
+          filename: resultFileName
+        });
+        return;
+      } catch (e) {
+        console.log('VKWebAppDownloadFile fallback');
+      }
+    }
+
+    // 2. Через Blob
+    const blob = dataURLtoBlob(resultDataUrl);
+    const blobUrl = URL.createObjectURL(blob);
+    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = resultFileName;
+    if (isMobile) a.target = '_blank';
     
-    const link = document.createElement('a');
-    link.download = resultFileName;
-    link.href = resultDataUrl;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
   });
 </script>
 
