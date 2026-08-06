@@ -7,34 +7,35 @@
   <!-- Подключаем VK Bridge SDK -->
   <script src="https://unpkg.com/@vkontakte/vk-bridge/dist/browser.min.js"></script>
   <style>
+    * { box-sizing: border-box; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       background-color: #f5f5f5;
       margin: 0;
-      padding: 20px;
+      padding: 15px;
       display: flex;
       justify-content: center;
       position: relative;
     }
     .card {
       background: white;
-      padding: 24px;
+      padding: 20px;
       border-radius: 12px;
       box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-      max-width: 420px;
+      max-width: 440px;
       width: 100%;
-      box-sizing: border-box;
     }
     h2 { margin-top: 0; margin-bottom: 16px; color: #2c2d2e; font-size: 20px; text-align: center; }
     
-    /* Баннер VK Donut */
+    /* Блок VK Donut */
     .donut-promo {
       background: linear-gradient(135deg, #1e1e24, #2a2a35);
       border: 1px solid #ff5722;
-      padding: 12px;
+      padding: 14px;
       border-radius: 10px;
       margin-bottom: 20px;
       text-align: center;
+      display: block !important; /* Принудительно отображаем */
     }
     .donut-promo-title { font-weight: bold; color: #fff; font-size: 14px; }
     .donut-promo-text { font-size: 12px; color: #bbb; margin: 4px 0 10px 0; }
@@ -42,11 +43,13 @@
       background: #ff5722;
       color: #fff;
       border: none;
-      padding: 9px 18px;
+      padding: 10px 20px;
       border-radius: 6px;
       font-weight: bold;
       cursor: pointer;
       font-size: 13px;
+      text-decoration: none;
+      display: inline-block;
       transition: background 0.2s;
     }
     .btn-donut:hover { background: #e64a19; }
@@ -56,7 +59,6 @@
     input[type="file"], input[type="number"], select {
       width: 100%;
       padding: 10px;
-      box-sizing: border-box;
       border: 1px solid #dce1e6;
       border-radius: 8px;
       font-size: 14px;
@@ -132,11 +134,11 @@
 <div class="card">
   <h2>Конвертер изображений</h2>
 
-  <!-- Баннер VK Donut прямо в карточке -->
+  <!-- Блок доната -->
   <div class="donut-promo">
     <div class="donut-promo-title">⚡ Поддержите проект</div>
     <div class="donut-promo-text">Помогите собрать на локальный ИИ-сервер</div>
-    <button onclick="openDonutPay()" class="btn-donut">Поддержать автора</button>
+    <a href="https://vk.com/donut/club236941413" target="_blank" class="btn-donut">Поддержать автора</a>
   </div>
   
   <div class="group">
@@ -195,7 +197,7 @@
     }, 3000);
   }
 
-  // Перехват alert для интеграции с VK
+  // Перехват alert
   window.alert = function(msg) {
     showToast(msg);
   };
@@ -207,20 +209,6 @@
       isVkApp = true;
     }
   } catch(e) { console.log('Не в среде VK'); }
-
-  function openDonutPay() {
-    const donutUrl = 'https://vk.ru/club236941413?w=donut_payment-236941413';
-    if (isVkApp && vkBridge.supports && vkBridge.supports('VKWebAppOpenPayForm')) {
-      vkBridge.send('VKWebAppOpenPayForm', {
-        action: 'transfer-to-group',
-        params: { group_id: 236941413 }
-      }).catch(() => {
-        window.open(donutUrl, '_blank');
-      });
-    } else {
-      window.open(donutUrl, '_blank');
-    }
-  }
 
   const upload = document.getElementById('upload');
   const widthInput = document.getElementById('width');
