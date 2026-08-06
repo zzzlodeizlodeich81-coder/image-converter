@@ -131,9 +131,9 @@
 
   <!-- Промо VK Donut -->
   <div id="donutBanner" class="donut-promo">
-    <div class="donut-promo-title">⚡ Без рекламы за 100 ₽/мес</div>
-    <div class="donut-promo-text">Оформите VK Donut и конвертируйте файлы мгновенно</div>
-    <button onclick="openDonutPay()" class="btn-donut">Отключить рекламу</button>
+    <div class="donut-promo-title">⚡ Поддержите проект</div>
+    <div class="donut-promo-text">Помогите собрать на локальный ИИ-сервер</div>
+    <button onclick="openDonutPay()" class="btn-donut">Поддержать авторов</button>
   </div>
   
   <div class="group">
@@ -150,16 +150,6 @@
       <label>Высота (px)</label>
       <input type="number" id="height" placeholder="1080">
     </div>
-  </div>
-
-  <!-- Режим вписывания для защиты от искажений -->
-  <div class="group">
-    <label>Режим изменения размера</label>
-    <select id="fitMode">
-      <option value="crop">Заполнить и обрезать (без искажений)</option>
-      <option value="blur">Размытый фон по бокам (без потерь)</option>
-      <option value="stretch">Растянуть (может исказить)</option>
-    </select>
   </div>
 
   <div class="row">
@@ -191,11 +181,7 @@
 <div id="toast" class="toast"></div>
 
 <script>
-  // УКАЖИТЕ ID ВАШЕЙ ГРУППЫ ВКОНТАКТЕ (только цифры)
-  const GROUP_ID = 22334455;
-
   let isVkApp = false;
-  let isDonutUser = false;
 
   function showToast(message) {
     const toast = document.getElementById('toast');
@@ -210,34 +196,22 @@
     showToast(msg);
   };
 
-  // Инициализация VK Bridge и проверка VK Donut
+  // Инициализация VK Bridge
   try {
     if (window.vkBridge) {
       vkBridge.send('VKWebAppInit');
       isVkApp = true;
-
-      const urlParams = new URLSearchParams(window.location.search);
-      if (urlParams.get('vk_is_donut') === '1') {
-        isDonutUser = true;
-        const banner = document.getElementById('donutBanner');
-        if (banner) banner.style.display = 'none';
-      }
     }
   } catch(e) { console.log('Не в среде VK'); }
 
   function openDonutPay() {
-    const donutUrl = `https://vk.com/donut/club${GROUP_ID}`;
-    if (isVkApp && vkBridge.supports && vkBridge.supports('VKWebAppOpenUrl')) {
-      vkBridge.send('VKWebAppOpenUrl', { url: donutUrl }).catch(() => window.open(donutUrl, '_blank'));
-    } else {
-      window.open(donutUrl, '_blank');
-    }
+    const donutUrl = 'https://vk.ru/club236941413?w=donut_payment-236941413';
+    window.open(donutUrl, '_blank');
   }
 
   const upload = document.getElementById('upload');
   const widthInput = document.getElementById('width');
   const heightInput = document.getElementById('height');
-  const fitModeSelect = document.getElementById('fitMode');
   const formatSelect = document.getElementById('format');
   const dpiInput = document.getElementById('dpi');
   
@@ -248,6 +222,7 @@
   const fileInfo = document.getElementById('fileInfo');
 
   let currentImg = null;
+  let originalAspectRatio = 1;
   let resultDataUrl = null;
   let resultFileName = '';
 
@@ -260,6 +235,7 @@
       const img = new Image();
       img.onload = () => {
         currentImg = img;
+        originalAspectRatio = img.width / img.height;
         widthInput.value = img.width;
         heightInput.value = img.height;
         previewContainer.style.display = 'none';
@@ -267,6 +243,26 @@
       img.src = event.target.result;
     };
     reader.readAsDataURL(file);
+  });
+
+  // Автоматический пересчет пропорций при изменении ширины
+  widthInput.addEventListener('input', () => {
+    if (currentImg && widthInput.value) {
+      const w = parseFloat(widthInput.value);
+      if (w > 0) {
+        heightInput.value = Math.round(w / originalAspectRatio);
+      }
+    }
+  });
+
+  // Автоматический пересчет пропорций при изменении высоты
+  heightInput.addEventListener('input', () => {
+    if (currentImg && heightInput.value) {
+      const h = parseFloat(heightInput.value);
+      if (h > 0) {
+        widthInput.value = Math.round(h * originalAspectRatio);
+      }
+    }
   });
 
   function changeJpegDpi(base64Data, dpi) {
@@ -307,75 +303,51 @@
   }
 
   // Нажатие кнопки СКОНВЕРТИРОВАТЬ
-  convertBtn.addEventListener('click', () => {
+  convertBtn.addEventListener('click', async () => {
     if (!currentImg) {
       showToast('Сначала выберите файл!');
       return;
     }
 
-    // Если подписчик VK Donut — конвертируем сразу без рекламы
-    if (isDonutUser || !isVkApp) {
-      performConversion();
-      return;
+    // Показ рекламы VK с надежным фолбэком на 3 секунды
+    if (isVkApp && window.vkBridge) {
+      try {
+        await Promise.race([
+          vkBridge.send('VKWebAppShowNativeAds', { ad_format: 'interstitial' }),
+          new Promise(resolve => setTimeout(resolve, 3000))
+        ]);
+      } catch (e) {
+        console.log('Реклама отменена или не загрузилась:', e);
+      }
     }
 
-    // Показ межстраничной рекламы для обычных пользователей
-    vkBridge.send('VKWebAppShowNativeAds', { ad_format: 'interstitial' })
-      .then(() => { performConversion(); })
-      .catch((err) => {
-        console.log('Ошибка/отмена рекламы:', err);
-        performConversion();
-      });
+    performConversion();
   });
 
-  // Логика конвертации с защитой пропорций
+  // Логика конвертации со строгим сохранением Aspect Ratio
   function performConversion() {
-    const w = parseInt(widthInput.value) || currentImg.width;
-    const h = parseInt(heightInput.value) || currentImg.height;
+    const targetW = parseInt(widthInput.value) || currentImg.width;
+    const targetH = parseInt(heightInput.value) || currentImg.height;
     const format = formatSelect.value;
     const dpi = parseInt(dpiInput.value) || 72;
-    const fitMode = fitModeSelect.value;
+
+    // Вычисляем масштаб с сохранением Aspect Ratio (без растяжения)
+    const ratio = Math.min(targetW / currentImg.width, targetH / currentImg.height);
+    const finalW = Math.round(currentImg.width * ratio);
+    const finalH = Math.round(currentImg.height * ratio);
 
     const canvas = document.createElement('canvas');
-    canvas.width = w;
-    canvas.height = h;
+    canvas.width = finalW;
+    canvas.height = finalH;
     const ctx = canvas.getContext('2d');
     
     if (format === 'image/jpeg') {
       ctx.fillStyle = '#FFFFFF';
-      ctx.fillRect(0, 0, w, h);
+      ctx.fillRect(0, 0, finalW, finalH);
     }
 
-    if (fitMode === 'crop') {
-      // Алгоритм заполнения с центральной обрезкой (без растяжения)
-      const scale = Math.max(w / currentImg.width, h / currentImg.height);
-      const nw = currentImg.width * scale;
-      const nh = currentImg.height * scale;
-      const nx = (w - nw) / 2;
-      const ny = (h - nh) / 2;
-      ctx.drawImage(currentImg, nx, ny, nw, nh);
-    } else if (fitMode === 'blur') {
-      // Алгоритм с размытием фона
-      ctx.save();
-      ctx.filter = 'blur(20px)';
-      ctx.drawImage(currentImg, -20, -20, w + 40, h + 40);
-      ctx.restore();
-
-      // Накладываем легкое затемнение на фон
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
-      ctx.fillRect(0, 0, w, h);
-
-      // Вписываем оригинальное изображение по центру
-      const scale = Math.min(w / currentImg.width, h / currentImg.height);
-      const nw = currentImg.width * scale;
-      const nh = currentImg.height * scale;
-      const nx = (w - nw) / 2;
-      const ny = (h - nh) / 2;
-      ctx.drawImage(currentImg, nx, ny, nw, nh);
-    } else {
-      // Стандартный вариант (растяжение)
-      ctx.drawImage(currentImg, 0, 0, w, h);
-    }
+    // Отрисовка без искажений
+    ctx.drawImage(currentImg, 0, 0, finalW, finalH);
 
     let dataUrl = canvas.toDataURL(format, 0.92);
 
@@ -389,14 +361,14 @@
     if (format === 'image/png') ext = 'png';
     if (format === 'image/webp') ext = 'webp';
     
-    resultFileName = `converted_${w}x${h}.${ext}`;
+    resultFileName = `converted_${finalW}x${finalH}.${ext}`;
     previewImg.src = dataUrl;
     
     const stringLength = dataUrl.length - 'data:image/png;base64,'.length;
     const sizeInBytes = 4 * Math.ceil(stringLength / 3) * 0.562489;
     const sizeInKb = (sizeInBytes / 1024).toFixed(1);
 
-    fileInfo.innerText = `Размер: ${w}x${h}px | Вес: ~${sizeInKb} KB`;
+    fileInfo.innerText = `Размер: ${finalW}x${finalH}px | Вес: ~${sizeInKb} KB`;
     previewContainer.style.display = 'block';
   }
 
