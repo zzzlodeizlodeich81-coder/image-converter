@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Конвертер изображений</title>
-  <!-- Подключаем VK Bridge SDK -->
   <script src="https://unpkg.com/@vkontakte/vk-bridge/dist/browser.min.js"></script>
   <style>
     * { box-sizing: border-box; }
@@ -15,7 +14,6 @@
       padding: 15px;
       display: flex;
       justify-content: center;
-      position: relative;
     }
     .card {
       background: white;
@@ -29,30 +27,28 @@
     
     /* Блок VK Donut */
     .donut-promo {
-      background: linear-gradient(135deg, #1e1e24, #2a2a35);
-      border: 1px solid #ff5722;
+      background: #ff5722;
+      color: #ffffff;
       padding: 14px;
       border-radius: 10px;
       margin-bottom: 20px;
       text-align: center;
-      display: block !important; /* Принудительно отображаем */
     }
-    .donut-promo-title { font-weight: bold; color: #fff; font-size: 14px; }
-    .donut-promo-text { font-size: 12px; color: #bbb; margin: 4px 0 10px 0; }
+    .donut-promo-title { font-weight: bold; font-size: 15px; margin-bottom: 4px; }
+    .donut-promo-text { font-size: 12px; opacity: 0.9; margin-bottom: 10px; }
     .btn-donut {
-      background: #ff5722;
-      color: #fff;
+      background: #ffffff;
+      color: #ff5722;
       border: none;
-      padding: 10px 20px;
+      padding: 10px 18px;
       border-radius: 6px;
       font-weight: bold;
       cursor: pointer;
       font-size: 13px;
-      text-decoration: none;
-      display: inline-block;
+      width: 100%;
       transition: background 0.2s;
     }
-    .btn-donut:hover { background: #e64a19; }
+    .btn-donut:hover { background: #f0f0f0; }
 
     .group { margin-bottom: 15px; }
     label { display: block; margin-bottom: 6px; font-weight: 600; font-size: 14px; color: #555; }
@@ -78,13 +74,9 @@
       font-size: 15px;
       cursor: pointer;
       margin-top: 10px;
-      transition: background 0.2s;
     }
     .btn:hover { background: #2276d7; }
-    
-    .btn-download {
-      background: #4bb34b;
-    }
+    .btn-download { background: #4bb34b; }
     .btn-download:hover { background: #3ec13e; }
 
     #previewContainer {
@@ -100,12 +92,8 @@
       border-radius: 8px;
       border: 1px solid #ddd;
     }
-    .file-info {
-      font-size: 13px;
-      color: #666;
-      margin-top: 5px;
-    }
-
+    .file-info { font-size: 13px; color: #666; margin-top: 5px; }
+    
     .toast {
       position: fixed;
       bottom: 20px;
@@ -116,17 +104,11 @@
       padding: 12px 20px;
       border-radius: 10px;
       font-size: 14px;
-      font-weight: 500;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.25);
       opacity: 0;
-      transition: transform 0.3s ease, opacity 0.3s ease;
+      transition: all 0.3s ease;
       z-index: 1000;
-      pointer-events: none;
     }
-    .toast.show {
-      transform: translateX(-50%) translateY(0);
-      opacity: 1;
-    }
+    .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
   </style>
 </head>
 <body>
@@ -134,11 +116,11 @@
 <div class="card">
   <h2>Конвертер изображений</h2>
 
-  <!-- Блок доната -->
+  <!-- БЛОК ДОНАТА -->
   <div class="donut-promo">
     <div class="donut-promo-title">⚡ Поддержите проект</div>
     <div class="donut-promo-text">Помогите собрать на локальный ИИ-сервер</div>
-    <a href="https://vk.com/donut/club236941413" target="_blank" class="btn-donut">Поддержать автора</a>
+    <button id="donutBtn" class="btn-donut">Поддержать автора</button>
   </div>
   
   <div class="group">
@@ -175,8 +157,7 @@
   <button id="convertBtn" class="btn">Сконвертировать</button>
 
   <div id="previewContainer">
-    <label>Результат:</label>
-    <br>
+    <label>Результат:</label><br>
     <img id="previewImg" src="" alt="Превью">
     <div id="fileInfo" class="file-info"></div>
     <button id="downloadBtn" class="btn btn-download">Скачать файл</button>
@@ -186,36 +167,43 @@
 <div id="toast" class="toast"></div>
 
 <script>
-  let isVkApp = false;
+  let isVk = false;
 
-  function showToast(message) {
+  function showToast(msg) {
     const toast = document.getElementById('toast');
-    toast.innerText = message;
+    toast.innerText = msg;
     toast.classList.add('show');
-    setTimeout(() => {
-      toast.classList.remove('show');
-    }, 3000);
+    setTimeout(() => toast.classList.remove('show'), 3000);
   }
 
-  // Перехват alert
-  window.alert = function(msg) {
-    showToast(msg);
-  };
+  if (window.vkBridge) {
+    vkBridge.send('VKWebAppInit')
+      .then(() => { isVk = true; })
+      .catch((e) => console.log('Bridge error', e));
+  }
 
-  // Инициализация VK Bridge
-  try {
-    if (window.vkBridge) {
-      vkBridge.send('VKWebAppInit');
-      isVkApp = true;
+  document.getElementById('donutBtn').addEventListener('click', () => {
+    const donutUrl = 'https://vk.com/donut/club236941413';
+    
+    if (isVk) {
+      vkBridge.send('VKWebAppOpenPayForm', {
+        action: 'transfer-to-group',
+        params: { group_id: 236941413 }
+      }).catch(() => {
+        vkBridge.send('VKWebAppOpenUrl', { url: donutUrl }).catch(() => {
+          window.open(donutUrl, '_blank');
+        });
+      });
+    } else {
+      window.open(donutUrl, '_blank');
     }
-  } catch(e) { console.log('Не в среде VK'); }
+  });
 
   const upload = document.getElementById('upload');
   const widthInput = document.getElementById('width');
   const heightInput = document.getElementById('height');
   const formatSelect = document.getElementById('format');
   const dpiInput = document.getElementById('dpi');
-  
   const convertBtn = document.getElementById('convertBtn');
   const downloadBtn = document.getElementById('downloadBtn');
   const previewContainer = document.getElementById('previewContainer');
@@ -230,7 +218,6 @@
   upload.addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (!file) return;
-
     const reader = new FileReader();
     reader.onload = (event) => {
       const img = new Image();
@@ -246,23 +233,17 @@
     reader.readAsDataURL(file);
   });
 
-  // Автоматический пересчет высоты при изменении ширины
   widthInput.addEventListener('input', () => {
     if (currentImg && widthInput.value) {
       const w = parseFloat(widthInput.value);
-      if (w > 0) {
-        heightInput.value = Math.round(w / originalAspectRatio);
-      }
+      if (w > 0) heightInput.value = Math.round(w / originalAspectRatio);
     }
   });
 
-  // Автоматический пересчет ширины при изменении высоты
   heightInput.addEventListener('input', () => {
     if (currentImg && heightInput.value) {
       const h = parseFloat(heightInput.value);
-      if (h > 0) {
-        widthInput.value = Math.round(h * originalAspectRatio);
-      }
+      if (h > 0) widthInput.value = Math.round(h * originalAspectRatio);
     }
   });
 
@@ -270,7 +251,6 @@
     const raw = atob(base64Data.split(',')[1]);
     const array = new Uint8Array(raw.length);
     for (let i = 0; i < raw.length; i++) array[i] = raw.charCodeAt(i);
-    
     if (array[0] === 0xFF && array[1] === 0xD8) {
       let offset = 2;
       while (offset < array.length) {
@@ -285,22 +265,9 @@
         offset += 1 + array[offset+2];
       }
     }
-    
     let binary = '';
     for (let i = 0; i < array.length; i++) binary += String.fromCharCode(array[i]);
     return 'data:image/jpeg;base64,' + btoa(binary);
-  }
-
-  function dataURLtoBlob(dataurl) {
-    const arr = dataurl.split(',');
-    const mime = arr[0].match(/:(.*?);/)[1];
-    const bstr = atob(arr[1]);
-    let n = bstr.length;
-    const u8arr = new Uint8Array(n);
-    while (n--) {
-      u8arr[n] = bstr.charCodeAt(n);
-    }
-    return new Blob([u8arr], { type: mime });
   }
 
   convertBtn.addEventListener('click', async () => {
@@ -309,14 +276,14 @@
       return;
     }
 
-    if (isVkApp && window.vkBridge) {
+    if (isVk) {
       try {
-        await Promise.race([
-          vkBridge.send('VKWebAppShowNativeAds', { ad_format: 'interstitial' }),
-          new Promise(resolve => setTimeout(resolve, 3000))
-        ]);
+        const adsCheck = await vkBridge.send('VKWebAppCheckNativeAds', { ad_format: 'interstitial' });
+        if (adsCheck.result) {
+          await vkBridge.send('VKWebAppShowNativeAds', { ad_format: 'interstitial' });
+        }
       } catch (e) {
-        console.log('Реклама отменена или не загрузилась:', e);
+        console.log('Реклама пропущена:', e);
       }
     }
 
@@ -344,7 +311,6 @@
     }
 
     ctx.drawImage(currentImg, 0, 0, finalW, finalH);
-
     let dataUrl = canvas.toDataURL(format, 0.92);
 
     if (format === 'image/jpeg') {
@@ -352,53 +318,32 @@
     }
 
     resultDataUrl = dataUrl;
-    
-    let ext = 'jpg';
-    if (format === 'image/png') ext = 'png';
-    if (format === 'image/webp') ext = 'webp';
-    
+    let ext = format === 'image/png' ? 'png' : (format === 'image/webp' ? 'webp' : 'jpg');
     resultFileName = `converted_${finalW}x${finalH}.${ext}`;
-    previewImg.src = dataUrl;
     
-    const stringLength = dataUrl.length - 'data:image/png;base64,'.length;
-    const sizeInBytes = 4 * Math.ceil(stringLength / 3) * 0.562489;
-    const sizeInKb = (sizeInBytes / 1024).toFixed(1);
-
-    fileInfo.innerText = `Размер: ${finalW}x${finalH}px | Вес: ~${sizeInKb} KB`;
+    previewImg.src = dataUrl;
+    const sizeInBytes = 4 * Math.ceil((dataUrl.length - 22) / 3) * 0.562489;
+    fileInfo.innerText = `Размер: ${finalW}x${finalH}px | Вес: ~${(sizeInBytes / 1024).toFixed(1)} KB`;
     previewContainer.style.display = 'block';
   }
 
   downloadBtn.addEventListener('click', async () => {
     if (!resultDataUrl) return;
 
-    if (isVkApp && vkBridge.supports && vkBridge.supports('VKWebAppDownloadFile')) {
+    if (isVk && vkBridge.supports('VKWebAppDownloadFile')) {
       try {
-        await vkBridge.send('VKWebAppDownloadFile', {
-          url: resultDataUrl,
-          filename: resultFileName
-        });
+        await vkBridge.send('VKWebAppDownloadFile', { url: resultDataUrl, filename: resultFileName });
         return;
-      } catch (e) {
-        console.log('VKWebAppDownloadFile fallback');
-      }
+      } catch (e) { console.log('Download fallback'); }
     }
 
-    const blob = dataURLtoBlob(resultDataUrl);
-    const blobUrl = URL.createObjectURL(blob);
-    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-
     const a = document.createElement('a');
-    a.href = blobUrl;
+    a.href = resultDataUrl;
     a.download = resultFileName;
-    if (isMobile) a.target = '_blank';
-    
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-
-    setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
   });
 </script>
-
 </body>
 </html>
