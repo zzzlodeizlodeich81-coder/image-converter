@@ -23,8 +23,34 @@
       box-shadow: 0 4px 12px rgba(0,0,0,0.08);
       max-width: 420px;
       width: 100%;
+      box-sizing: border-box;
     }
-    h2 { margin-top: 0; color: #2c2d2e; font-size: 20px; text-align: center; }
+    h2 { margin-top: 0; margin-bottom: 16px; color: #2c2d2e; font-size: 20px; text-align: center; }
+    
+    /* Баннер VK Donut */
+    .donut-promo {
+      background: linear-gradient(135deg, #1e1e24, #2a2a35);
+      border: 1px solid #ff5722;
+      padding: 12px;
+      border-radius: 10px;
+      margin-bottom: 20px;
+      text-align: center;
+    }
+    .donut-promo-title { font-weight: bold; color: #fff; font-size: 14px; }
+    .donut-promo-text { font-size: 12px; color: #bbb; margin: 4px 0 10px 0; }
+    .btn-donut {
+      background: #ff5722;
+      color: #fff;
+      border: none;
+      padding: 9px 18px;
+      border-radius: 6px;
+      font-weight: bold;
+      cursor: pointer;
+      font-size: 13px;
+      transition: background 0.2s;
+    }
+    .btn-donut:hover { background: #e64a19; }
+
     .group { margin-bottom: 15px; }
     label { display: block; margin-bottom: 6px; font-weight: 600; font-size: 14px; color: #555; }
     input[type="file"], input[type="number"], select {
@@ -53,34 +79,11 @@
       transition: background 0.2s;
     }
     .btn:hover { background: #2276d7; }
-    .btn:disabled { background: #cccccc; cursor: not-allowed; }
     
     .btn-download {
       background: #4bb34b;
     }
     .btn-download:hover { background: #3ec13e; }
-
-    /* Баннер VK Donut */
-    .donut-promo {
-      background: linear-gradient(135deg, #1e1e24, #2a2a35);
-      border: 1px solid #ff5722;
-      padding: 12px;
-      border-radius: 10px;
-      margin-bottom: 15px;
-      text-align: center;
-    }
-    .donut-promo-title { font-weight: bold; color: #fff; font-size: 14px; }
-    .donut-promo-text { font-size: 11px; color: #aaa; margin: 4px 0 8px 0; }
-    .btn-donut {
-      background: #ff5722;
-      color: #fff;
-      border: none;
-      padding: 8px 16px;
-      border-radius: 6px;
-      font-weight: bold;
-      cursor: pointer;
-      font-size: 13px;
-    }
 
     #previewContainer {
       margin-top: 15px;
@@ -129,11 +132,11 @@
 <div class="card">
   <h2>Конвертер изображений</h2>
 
-  <!-- Промо VK Donut -->
-  <div id="donutBanner" class="donut-promo">
+  <!-- Баннер VK Donut прямо в карточке -->
+  <div class="donut-promo">
     <div class="donut-promo-title">⚡ Поддержите проект</div>
     <div class="donut-promo-text">Помогите собрать на локальный ИИ-сервер</div>
-    <button onclick="openDonutPay()" class="btn-donut">Поддержать авторов</button>
+    <button onclick="openDonutPay()" class="btn-donut">Поддержать автора</button>
   </div>
   
   <div class="group">
@@ -192,6 +195,7 @@
     }, 3000);
   }
 
+  // Перехват alert для интеграции с VK
   window.alert = function(msg) {
     showToast(msg);
   };
@@ -206,7 +210,16 @@
 
   function openDonutPay() {
     const donutUrl = 'https://vk.ru/club236941413?w=donut_payment-236941413';
-    window.open(donutUrl, '_blank');
+    if (isVkApp && vkBridge.supports && vkBridge.supports('VKWebAppOpenPayForm')) {
+      vkBridge.send('VKWebAppOpenPayForm', {
+        action: 'transfer-to-group',
+        params: { group_id: 236941413 }
+      }).catch(() => {
+        window.open(donutUrl, '_blank');
+      });
+    } else {
+      window.open(donutUrl, '_blank');
+    }
   }
 
   const upload = document.getElementById('upload');
@@ -245,7 +258,7 @@
     reader.readAsDataURL(file);
   });
 
-  // Автоматический пересчет пропорций при изменении ширины
+  // Автоматический пересчет высоты при изменении ширины
   widthInput.addEventListener('input', () => {
     if (currentImg && widthInput.value) {
       const w = parseFloat(widthInput.value);
@@ -255,7 +268,7 @@
     }
   });
 
-  // Автоматический пересчет пропорций при изменении высоты
+  // Автоматический пересчет ширины при изменении высоты
   heightInput.addEventListener('input', () => {
     if (currentImg && heightInput.value) {
       const h = parseFloat(heightInput.value);
@@ -302,14 +315,12 @@
     return new Blob([u8arr], { type: mime });
   }
 
-  // Нажатие кнопки СКОНВЕРТИРОВАТЬ
   convertBtn.addEventListener('click', async () => {
     if (!currentImg) {
       showToast('Сначала выберите файл!');
       return;
     }
 
-    // Показ рекламы VK с надежным фолбэком на 3 секунды
     if (isVkApp && window.vkBridge) {
       try {
         await Promise.race([
@@ -324,14 +335,12 @@
     performConversion();
   });
 
-  // Логика конвертации со строгим сохранением Aspect Ratio
   function performConversion() {
     const targetW = parseInt(widthInput.value) || currentImg.width;
     const targetH = parseInt(heightInput.value) || currentImg.height;
     const format = formatSelect.value;
     const dpi = parseInt(dpiInput.value) || 72;
 
-    // Вычисляем масштаб с сохранением Aspect Ratio (без растяжения)
     const ratio = Math.min(targetW / currentImg.width, targetH / currentImg.height);
     const finalW = Math.round(currentImg.width * ratio);
     const finalH = Math.round(currentImg.height * ratio);
@@ -346,7 +355,6 @@
       ctx.fillRect(0, 0, finalW, finalH);
     }
 
-    // Отрисовка без искажений
     ctx.drawImage(currentImg, 0, 0, finalW, finalH);
 
     let dataUrl = canvas.toDataURL(format, 0.92);
@@ -372,7 +380,6 @@
     previewContainer.style.display = 'block';
   }
 
-  // Скачивание файла
   downloadBtn.addEventListener('click', async () => {
     if (!resultDataUrl) return;
 
