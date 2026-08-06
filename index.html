@@ -60,6 +60,28 @@
     }
     .btn-download:hover { background: #3ec13e; }
 
+    /* Баннер VK Donut */
+    .donut-promo {
+      background: linear-gradient(135deg, #1e1e24, #2a2a35);
+      border: 1px solid #ff5722;
+      padding: 12px;
+      border-radius: 10px;
+      margin-bottom: 15px;
+      text-align: center;
+    }
+    .donut-promo-title { font-weight: bold; color: #fff; font-size: 14px; }
+    .donut-promo-text { font-size: 11px; color: #aaa; margin: 4px 0 8px 0; }
+    .btn-donut {
+      background: #ff5722;
+      color: #fff;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-weight: bold;
+      cursor: pointer;
+      font-size: 13px;
+    }
+
     #previewContainer {
       margin-top: 15px;
       text-align: center;
@@ -79,7 +101,6 @@
       margin-top: 5px;
     }
 
-    /* Стильное встроенное уведомление вместо alert() */
     .toast {
       position: fixed;
       bottom: 20px;
@@ -107,6 +128,13 @@
 
 <div class="card">
   <h2>Конвертер изображений</h2>
+
+  <!-- Промо VK Donut -->
+  <div id="donutBanner" class="donut-promo">
+    <div class="donut-promo-title">⚡ Без рекламы за 100 ₽/мес</div>
+    <div class="donut-promo-text">Оформите VK Donut и конвертируйте файлы мгновенно</div>
+    <button onclick="openDonutPay()" class="btn-donut">Отключить рекламу</button>
+  </div>
   
   <div class="group">
     <label>Выберите изображение</label>
@@ -122,6 +150,16 @@
       <label>Высота (px)</label>
       <input type="number" id="height" placeholder="1080">
     </div>
+  </div>
+
+  <!-- Режим вписывания для защиты от искажений -->
+  <div class="group">
+    <label>Режим изменения размера</label>
+    <select id="fitMode">
+      <option value="crop">Заполнить и обрезать (без искажений)</option>
+      <option value="blur">Размытый фон по бокам (без потерь)</option>
+      <option value="stretch">Растянуть (может исказить)</option>
+    </select>
   </div>
 
   <div class="row">
@@ -141,7 +179,6 @@
 
   <button id="convertBtn" class="btn">Сконвертировать</button>
 
-  <!-- Блок предпросмотра и скачивания -->
   <div id="previewContainer">
     <label>Результат:</label>
     <br>
@@ -151,13 +188,15 @@
   </div>
 </div>
 
-<!-- Кастомное уведомление -->
 <div id="toast" class="toast"></div>
 
 <script>
-  let isVkApp = false;
+  // УКАЖИТЕ ID ВАШЕЙ ГРУППЫ ВКОНТАКТЕ (только цифры)
+  const GROUP_ID = 22334455;
 
-  // Функция вывода кастомного уведомления в интерфейсе сервиса
+  let isVkApp = false;
+  let isDonutUser = false;
+
   function showToast(message) {
     const toast = document.getElementById('toast');
     toast.innerText = message;
@@ -167,22 +206,38 @@
     }, 3000);
   }
 
-  // Заглушка, чтобы случайный alert() от сторонних библиотек не вылез
   window.alert = function(msg) {
     showToast(msg);
   };
 
-  // Инициализация VK Bridge
+  // Инициализация VK Bridge и проверка VK Donut
   try {
     if (window.vkBridge) {
       vkBridge.send('VKWebAppInit');
       isVkApp = true;
+
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('vk_is_donut') === '1') {
+        isDonutUser = true;
+        const banner = document.getElementById('donutBanner');
+        if (banner) banner.style.display = 'none';
+      }
     }
   } catch(e) { console.log('Не в среде VK'); }
+
+  function openDonutPay() {
+    const donutUrl = `https://vk.com/donut/club${GROUP_ID}`;
+    if (isVkApp && vkBridge.supports && vkBridge.supports('VKWebAppOpenUrl')) {
+      vkBridge.send('VKWebAppOpenUrl', { url: donutUrl }).catch(() => window.open(donutUrl, '_blank'));
+    } else {
+      window.open(donutUrl, '_blank');
+    }
+  }
 
   const upload = document.getElementById('upload');
   const widthInput = document.getElementById('width');
   const heightInput = document.getElementById('height');
+  const fitModeSelect = document.getElementById('fitMode');
   const formatSelect = document.getElementById('format');
   const dpiInput = document.getElementById('dpi');
   
@@ -196,7 +251,6 @@
   let resultDataUrl = null;
   let resultFileName = '';
 
-  // Автоподстановка размеров
   upload.addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -215,7 +269,6 @@
     reader.readAsDataURL(file);
   });
 
-  // Запись DPI в JPEG
   function changeJpegDpi(base64Data, dpi) {
     const raw = atob(base64Data.split(',')[1]);
     const array = new Uint8Array(raw.length);
@@ -241,7 +294,6 @@
     return 'data:image/jpeg;base64,' + btoa(binary);
   }
 
-  // Преобразование dataURI в Blob
   function dataURLtoBlob(dataurl) {
     const arr = dataurl.split(',');
     const mime = arr[0].match(/:(.*?);/)[1];
@@ -261,10 +313,28 @@
       return;
     }
 
+    // Если подписчик VK Donut — конвертируем сразу без рекламы
+    if (isDonutUser || !isVkApp) {
+      performConversion();
+      return;
+    }
+
+    // Показ межстраничной рекламы для обычных пользователей
+    vkBridge.send('VKWebAppShowNativeAds', { ad_format: 'interstitial' })
+      .then(() => { performConversion(); })
+      .catch((err) => {
+        console.log('Ошибка/отмена рекламы:', err);
+        performConversion();
+      });
+  });
+
+  // Логика конвертации с защитой пропорций
+  function performConversion() {
     const w = parseInt(widthInput.value) || currentImg.width;
     const h = parseInt(heightInput.value) || currentImg.height;
     const format = formatSelect.value;
     const dpi = parseInt(dpiInput.value) || 72;
+    const fitMode = fitModeSelect.value;
 
     const canvas = document.createElement('canvas');
     canvas.width = w;
@@ -276,7 +346,36 @@
       ctx.fillRect(0, 0, w, h);
     }
 
-    ctx.drawImage(currentImg, 0, 0, w, h);
+    if (fitMode === 'crop') {
+      // Алгоритм заполнения с центральной обрезкой (без растяжения)
+      const scale = Math.max(w / currentImg.width, h / currentImg.height);
+      const nw = currentImg.width * scale;
+      const nh = currentImg.height * scale;
+      const nx = (w - nw) / 2;
+      const ny = (h - nh) / 2;
+      ctx.drawImage(currentImg, nx, ny, nw, nh);
+    } else if (fitMode === 'blur') {
+      // Алгоритм с размытием фона
+      ctx.save();
+      ctx.filter = 'blur(20px)';
+      ctx.drawImage(currentImg, -20, -20, w + 40, h + 40);
+      ctx.restore();
+
+      // Накладываем легкое затемнение на фон
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+      ctx.fillRect(0, 0, w, h);
+
+      // Вписываем оригинальное изображение по центру
+      const scale = Math.min(w / currentImg.width, h / currentImg.height);
+      const nw = currentImg.width * scale;
+      const nh = currentImg.height * scale;
+      const nx = (w - nw) / 2;
+      const ny = (h - nh) / 2;
+      ctx.drawImage(currentImg, nx, ny, nw, nh);
+    } else {
+      // Стандартный вариант (растяжение)
+      ctx.drawImage(currentImg, 0, 0, w, h);
+    }
 
     let dataUrl = canvas.toDataURL(format, 0.92);
 
@@ -291,7 +390,6 @@
     if (format === 'image/webp') ext = 'webp';
     
     resultFileName = `converted_${w}x${h}.${ext}`;
-
     previewImg.src = dataUrl;
     
     const stringLength = dataUrl.length - 'data:image/png;base64,'.length;
@@ -300,13 +398,12 @@
 
     fileInfo.innerText = `Размер: ${w}x${h}px | Вес: ~${sizeInKb} KB`;
     previewContainer.style.display = 'block';
-  });
+  }
 
-  // УНИВЕРСАЛЬНОЕ СКАЧИВАНИЕ (ВК Мобильный + ПК + Браузеры)
+  // Скачивание файла
   downloadBtn.addEventListener('click', async () => {
     if (!resultDataUrl) return;
 
-    // 1. Через VK Bridge (для моб. приложения)
     if (isVkApp && vkBridge.supports && vkBridge.supports('VKWebAppDownloadFile')) {
       try {
         await vkBridge.send('VKWebAppDownloadFile', {
@@ -319,7 +416,6 @@
       }
     }
 
-    // 2. Через Blob
     const blob = dataURLtoBlob(resultDataUrl);
     const blobUrl = URL.createObjectURL(blob);
     const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
