@@ -24,30 +24,6 @@
       width: 100%;
     }
     h2 { margin-top: 0; margin-bottom: 16px; color: #2c2d2e; font-size: 20px; text-align: center; }
-    
-    .donut-promo {
-      background: #ff5722;
-      color: #ffffff;
-      padding: 14px;
-      border-radius: 10px;
-      margin-bottom: 20px;
-      text-align: center;
-    }
-    .donut-promo-title { font-weight: bold; font-size: 15px; margin-bottom: 4px; }
-    .donut-promo-text { font-size: 12px; opacity: 0.9; margin-bottom: 10px; }
-    .btn-donut {
-      background: #ffffff;
-      color: #ff5722;
-      border: none;
-      padding: 10px 18px;
-      border-radius: 6px;
-      font-weight: bold;
-      cursor: pointer;
-      font-size: 13px;
-      width: 100%;
-      transition: background 0.2s;
-    }
-    .btn-donut:hover { background: #f0f0f0; }
 
     .group { margin-bottom: 15px; }
     label { display: block; margin-bottom: 6px; font-weight: 600; font-size: 14px; color: #555; }
@@ -115,12 +91,6 @@
 <div class="card">
   <h2>Конвертер изображений</h2>
 
-  <div class="donut-promo">
-    <div class="donut-promo-title">⚡ Поддержите проект</div>
-    <div class="donut-promo-text">Помогите собрать на локальный ИИ-сервер</div>
-    <button id="donutBtn" class="btn-donut">Поддержать автора</button>
-  </div>
-  
   <div class="group">
     <label>Выберите изображение</label>
     <input type="file" id="upload" accept="image/*">
@@ -180,23 +150,6 @@
       .catch((e) => console.log('Bridge error', e));
   }
 
-  document.getElementById('donutBtn').addEventListener('click', () => {
-    const donutUrl = 'https://vk.com/donut/club236941413';
-    
-    if (isVk) {
-      vkBridge.send('VKWebAppOpenPayForm', {
-        action: 'transfer-to-group',
-        params: { group_id: 236941413 }
-      }).catch(() => {
-        vkBridge.send('VKWebAppOpenUrl', { url: donutUrl }).catch(() => {
-          window.open(donutUrl, '_blank');
-        });
-      });
-    } else {
-      window.open(donutUrl, '_blank');
-    }
-  });
-
   const upload = document.getElementById('upload');
   const widthInput = document.getElementById('width');
   const heightInput = document.getElementById('height');
@@ -209,7 +162,6 @@
   const fileInfo = document.getElementById('fileInfo');
 
   let currentImg = null;
-  let originalAspectRatio = 1;
   let resultDataUrl = null;
   let resultFileName = '';
 
@@ -221,7 +173,6 @@
       const img = new Image();
       img.onload = () => {
         currentImg = img;
-        originalAspectRatio = img.width / img.height;
         widthInput.value = img.width;
         heightInput.value = img.height;
         previewContainer.style.display = 'none';
@@ -229,20 +180,6 @@
       img.src = event.target.result;
     };
     reader.readAsDataURL(file);
-  });
-
-  widthInput.addEventListener('input', () => {
-    if (currentImg && widthInput.value) {
-      const w = parseFloat(widthInput.value);
-      if (w > 0) heightInput.value = Math.round(w / originalAspectRatio);
-    }
-  });
-
-  heightInput.addEventListener('input', () => {
-    if (currentImg && heightInput.value) {
-      const h = parseFloat(heightInput.value);
-      if (h > 0) widthInput.value = Math.round(h * originalAspectRatio);
-    }
   });
 
   function changeJpegDpi(base64Data, dpi) {
@@ -289,14 +226,10 @@
   });
 
   function performConversion() {
-    const targetW = parseInt(widthInput.value) || currentImg.width;
-    const targetH = parseInt(heightInput.value) || currentImg.height;
+    const finalW = parseInt(widthInput.value) || currentImg.width;
+    const finalH = parseInt(heightInput.value) || currentImg.height;
     const format = formatSelect.value;
     const dpi = parseInt(dpiInput.value) || 72;
-
-    const ratio = Math.min(targetW / currentImg.width, targetH / currentImg.height);
-    const finalW = Math.round(currentImg.width * ratio);
-    const finalH = Math.round(currentImg.height * ratio);
 
     const canvas = document.createElement('canvas');
     canvas.width = finalW;
@@ -345,7 +278,3 @@
 </script>
 </body>
 </html>
-
-
-
-
